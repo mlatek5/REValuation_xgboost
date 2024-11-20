@@ -1,0 +1,760 @@
+---
+title: "EDA for Short Report"
+author: "Monica Latek + Justin Janicke"
+date: "2024-09-23"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Machine Learning Short Report
+
+
+## Load Packages & Data
+```{r}
+library(ggplot2)
+library(tidyverse)
+library(DataExplorer)
+library(corrplot)
+library(dplyr)
+
+re_data <- read.csv("real_estate_data_chicago.csv")
+head(re_data)
+```
+
+# Exploratory Data Overview
+
+
+## Data Structure
+
+### Structure + Summary
+
+```{r}
+str(re_data)
+
+dim(re_data)
+
+colnames(re_data)
+
+```
+
+```{r}
+summary(re_data)
+```
+
+
+### Missing Values
+
+
+```{r}
+plot_missing(re_data)
+
+```
+
+### Correlations
+
+```{r}
+cor_matrix <- cor(select_if(re_data, is.numeric), use = "complete.obs")
+
+corrplot(cor_matrix, method = "circle")
+
+```
+
+
+
+## Exploratory Visualizations
+
+```{r}
+
+property_counts <- re_data %>%
+  group_by(type) %>%
+  summarise(count = n()) %>%
+  arrange(desc(count)) 
+
+ggplot(property_counts, aes(x = reorder(type, -count), y = count)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(title = "Number of Properties by Property Type", x = "Property Type", y = "Number of Properties") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+```
+
+
+```{r}
+
+ggplot(re_data, aes(y = listPrice)) +
+  geom_boxplot(fill = "lightblue", outlier.colour = "red", outlier.size = 2) +
+  labs(title = "Boxplot of Property List Price", y = "List Price") +
+  theme_minimal()
+
+
+ggplot(re_data, aes(x = type, y = listPrice)) +
+  geom_boxplot(fill = "lightblue", outlier.colour = "red", outlier.size = 2) +
+  labs(title = "Box Plot of List Price by Property Type", x = "Property Type", y = "List Price") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+```
+
+
+```{r}
+# Create a box plot of the log-transformed listPrice
+ggplot(re_data, aes(x = "", y = log(listPrice + 1))) + # Add 1 to avoid log(0)
+  geom_boxplot(fill = "lightblue", outlier.colour = "red", outlier.size = 4) +
+  labs(title = "Box Plot of Log-Transformed List Price", x = "", y = "Log(List Price)") +
+  theme_minimal() +
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+
+```
+
+
+```{r}
+# Load the necessary library
+library(ggplot2)
+
+# Create a box plot of listPrice in re_data
+ggplot(re_data, aes(x = "", y = listPrice)) +
+  geom_boxplot(fill = "lightblue") +
+  labs(title = "Box Plot of List Price", x = "", y = "List Price") +
+  theme_minimal() +
+  theme(axis.title.x = element_blank(), # Hide x-axis title
+        axis.text.x = element_blank(),  # Hide x-axis text
+        axis.ticks.x = element_blank()) # Hide x-axis ticks
+
+```
+
+
+```{r}
+Q1 <- quantile(re_data$listPrice, 0.25, na.rm = TRUE)
+Q3 <- quantile(re_data$listPrice, 0.75, na.rm = TRUE)
+IQR <- Q3 - Q1
+
+data_filtered <- re_data %>% filter(listPrice >= (Q1 - 1.5 * IQR) & listPrice <= (Q3 + 1.5 * IQR))
+
+ggplot(data_filtered, aes(y = listPrice)) +
+  geom_boxplot(fill = "lightblue", outlier.colour = "red", outlier.size = 2) +
+  labs(title = "Boxplot of Property List Price (IQR Filter)", y = "List Price") +
+  theme_minimal()
+
+```
+
+
+
+
+
+
+```{r}
+ggplot(re_data, aes(x = listPrice)) +
+  geom_histogram(bins = 30, fill = "blue", alpha = 0.7) +
+  labs(title = "Distribution of Property Prices", x = "Price", y = "Frequency")
+
+```
+
+
+
+
+
+
+
+
+
+
+# Data Preprocessing
+
+
+
+
+## Unstructured Data: Binary Indicators
+
+```{r}
+move_in <- rep(0, nrow(re_data))
+move_in[grep("Move-in ready", re_data, ignore.case = TRUE)] <- 1
+```
+
+
+```{r}
+# Make list of terms
+search_terms <- c("amazing", "beautiful", "spacious", "luxury", "modern", 
+                    "renovated", "charming", "move-in", "updated", "prime", 
+                    "great", "excellent", "convenient", "lovely", "desirable", "remodel\\w*", "rare", "opportunity", "invest\\w*", "rehab\\w*", "new", "prime location", "location", "view", "pet")
+
+# Make result data frame
+res_dat <- as.data.frame(matrix(NA, nrow = nrow(re_data), ncol = length(search_terms)))
+# Apply column names
+names(res_dat) <- search_terms
+# Lopp through search terms
+
+
+for(i in 1:length(search_terms)) {
+    # Find indices of matches
+    matches <- grep(search_terms[i], re_data$text, ignore.case = TRUE)
+    # Store 1 if term is present
+    if(length(matches) > 0) {
+        res_dat[matches, i] <- 1
+    }
+}
+
+
+res_dat[is.na(res_dat)] <- 0
+```
+
+
+
+```{r}
+# Make list of terms
+search_term <- c("Albany Park", "Andersonville", "Auburn Gresham", "Avondale", "Belmont Cragin", "Beverly", "Bridgeport", "Brighton Park", "Bucktown", "Calumet Heights", "Central Station", "Chatham", "Chicago Lawn", "Chinatown", "Dunning", "East Garfield Park", "Edgewater", "Edison Park", "Englewood", "Forest Glen", "Fuller Park", "Gage Park", "Galewood", "Gold Coast", "Greater Grand Crossing", "Hegewisch", "Humboldt Park", "Hyde Park", "Irving Park", "Jefferson Park", "Lakeview", "Lakeview East", "Lincoln Park", "Lincoln Square", "Little Italy", "Little Village", "Logan Square", "Loop", "Mckinley Park", "Morgan Park", "Mount Greenwood", "North Center", "Norwood Park", "North Lawndale", "Northwest Side", "Old Town", "Pilsen", "Portage Park", "River North", "Rogers Park", "Roscoe Village", "Roseland", "South Chicago", "South Loop", "South Shore", "Streeterville", "Uptown", "Ukranian Village", "Washington Park", "West Englewood", "West Loop", "West Pullman", "West Ridge", "West Town", "Wicker Park", "Woodlawn")
+
+# Make result data frame
+res_loc <- as.data.frame(matrix(NA, nrow = nrow(re_data), ncol = length(search_term)))
+# Apply column names
+names(res_loc) <- search_term
+# Lopp through search terms
+
+
+for(i in 1:length(search_term)) {
+    # Find indices of matches
+    matches <- grep(search_term[i], re_data$text, ignore.case = TRUE)
+    # Store 1 if term is present
+    if(length(matches) > 0) {
+        res_loc[matches, i] <- 1
+    }
+}
+
+res_loc[is.na(res_loc)] <- 0 
+
+```
+
+
+```{r}
+full_dat <- cbind.data.frame(re_data, res_dat, res_loc)
+```
+
+
+
+
+
+## Data Cleaning
+
+### Remove Missing Values
+
+```{r}
+full_dat <- full_dat[order(full_dat$listPrice), ]
+```
+
+```{r}
+# Remove the missing list prices + exclude incorrect values
+full_dat <- full_dat[-c(1:3, (nrow(full_dat)-8):nrow(full_dat)), ]
+
+
+```
+
+
+### Filter Outliers
+```{r}
+# Define the outlier limits in one step
+full_dat <- full_dat %>%
+  filter(listPrice >= quantile(listPrice, 0.25) - 1.5 * IQR(listPrice) &
+         listPrice <= quantile(listPrice, 0.75) + 1.5 * IQR(listPrice))
+
+# Check the dimensions of the new dataset
+dim(full_dat)
+
+# Optionally, check the summary of the filtered data
+summary(full_dat$listPrice)
+
+```
+
+
+
+### Mean/Random Forest Imputation
+
+
+```{r}
+
+library(mice)
+library(ranger)
+
+# Define the features to be imputed
+feat_vars <- c("year_built", "lastSoldPrice", "beds", "baths", "baths_full", 
+               "lot_sqft", "sqft", 
+               "stories", "listPrice")  
+
+# Perform imputation with mixed methods
+imputed_values <- mice(data = full_dat[, feat_vars], 
+                       m = 1,                # Number of multiple imputations
+                       maxit = 40,          # Maximum number of iterations
+                       method = c("rf", "rf", rep("mean", length(feat_vars) - 2)), # Use "rf" for year_built and "mean" for others
+                       print = FALSE)
+
+# Replace original values with imputed values
+full_dat[, feat_vars] <- complete(imputed_values, 1)  
+
+# Summarize the imputed data
+summary(full_dat)
+
+
+```
+
+
+
+```{r}
+# For half baths and garages, set NA = 0
+full_dat$baths_half[is.na(full_dat$baths_half)] <- 0
+
+full_dat$garage[is.na(full_dat$garage)] <- 0
+
+```
+
+
+
+
+# Linear Regression
+```{r}
+re_dat <- full_dat %>% select(-text, -soldOn, -status)
+
+lm_model <- lm(listPrice ~. , data = re_dat)
+
+
+summary(lm_model)
+```
+
+
+
+# Feature Selection
+
+## LASSO
+
+```{r}
+library(glmnet)
+library(plotmo)
+library(dplyr)
+```
+
+
+```{r}
+
+xvars <- full_dat
+
+xvars[, c(3, 4, 5, 6, 7, 8, 9, 10, 11)] <- scale(xvars[, c(3, 4, 5, 6, 7, 8, 9, 10, 11)])
+# include year built in scale? 
+
+xvars <- xvars %>% select(-text, -status, -soldOn)
+
+
+
+x <- model.matrix(listPrice ~ ., data = xvars)[, -1]  # Exclude the intercept
+y <- full_dat$listPrice
+
+
+length(y) # For the response variable
+nrow(x)   # For the predictor matrix
+
+```
+
+
+
+```{r}
+# Fit the Lasso regression model
+lasso_model <- cv.glmnet(x, y, alpha = 1)
+
+lasso_model
+```
+
+```{r}
+coef(lasso_model)
+```
+
+
+
+# Random Trees
+
+```{r}
+library(randomForest)
+library(rpart)
+library(caret)
+
+num_rows <- nrow(full_dat)
+set.seed(1234556)
+train_indices <- sample(1:num_rows, size = 0.8 * num_rows)
+
+
+names(full_dat) <- make.names(names(full_dat))
+train_db <- full_dat[train_indices, ]  # Training set
+test_db <- full_dat[-train_indices, ]   # Testing set
+
+
+
+
+rf_mod <- randomForest(listPrice ~ ., 
+                       data = train_db, 
+                       ntree = 200, 
+                       nodesize = 1, 
+                       mtry = sqrt(ncol(train_db) - 1),
+                       importance = TRUE)  
+
+
+rf_preds <- predict(rf_mod, newdata = test_db) 
+
+
+rmse <- sqrt(mean((test_db$listPrice - rf_preds)^2))
+rmse
+
+```
+
+
+
+```{r}
+results <- postResample(rf_preds, test_db$listPrice)
+results
+```
+
+
+
+
+# XG Boost
+
+## Set Up
+
+```{r}
+library(xgboost)
+library(dplyr)
+
+xvars <- full_dat
+
+xvars[, c(3, 4, 5, 6, 7, 8, 9, 10, 11)] <- scale(xvars[, c(3, 4, 5, 6, 7, 8, 9, 10, 11)])
+
+xvars <- xvars %>% select(-text, -status, -type, -soldOn) #Remove type? or change to factor
+
+set.seed(123)  # For reproducibility
+train_indices <- sample(1:nrow(xvars), size = 0.8 * nrow(xvars))  # 80% for training
+train_db <- xvars[train_indices, ]  # Training set
+test_db <- xvars[-train_indices, ]    # Testing set
+
+# Create training matrix
+dtrain <- xgb.DMatrix(data = as.matrix(train_db[, -which(names(train_db) == "listPrice")]), 
+                        label = train_db$listPrice)
+
+# Create test matrix
+dtest <- xgb.DMatrix(data = as.matrix(test_db[, -which(names(test_db) == "listPrice")]), 
+                       label = test_db$listPrice)
+
+
+```
+
+
+## Initial Model
+
+```{r}
+
+set.seed(123)
+
+# Train the XGBoost model
+bst_1 <- xgboost(
+  data = dtrain,               # Set training data
+  nrounds = 200,               # Set number of rounds
+  verbose = 1,                 # Prints out fit for every 20th iteration
+  print_every_n = 20,          # Prints out result every 20th iteration
+  objective = "reg:squarederror",  # Regression task for continuous output
+  eval_metric = "rmse"         # Set evaluation metric to RMSE
+)
+
+
+predictions <- predict(bst_1, newdata = dtest)
+
+
+mse <- mean((test_db$listPrice - predictions)^2)
+mse
+
+
+```
+
+```{r}
+results <- postResample(predictions, test_db$listPrice)
+results
+```
+
+
+
+
+## Tuning Process
+
+
+```{r}
+###### 4 - eta tuning ######
+
+# Use xgb.cv to run cross-validation inside xgboost
+set.seed(111111)
+bst_mod_1 <- xgb.cv(data = dtrain, # Set training data
+                    
+                    nfold = 5, # Use 5 fold cross-validation
+                    
+                    eta = 0.03, # Set learning rate
+                    max.depth = 7, # Set max depth
+                    min_child_weight = 10, # Set minimum number of samples in node to split
+                    gamma = 0, # Set minimum loss reduction for split
+                    subsample = 0.9, # Set proportion of training data to use in tree
+                    colsample_bytree =  0.9, # Set number of variables to use in each tree
+                    
+                    nrounds = 1000, # Set number of rounds
+                    early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
+                    
+                    verbose = 1, # 1 - Prints out fit
+                    nthread = 1, # Set number of parallel threads
+                    print_every_n = 20 # Prints out result every 20th iteration
+) # Set evaluation metric to use
+
+
+set.seed(111111)
+bst_mod_2 <- xgb.cv(data = dtrain, # Set training data
+                    
+                    nfold = 5, # Use 5 fold cross-validation
+                    
+                    eta = 0.01, # Set learning rate
+                    max.depth =  7, # Set max depth
+                    min_child_weight = 10, # Set minimum number of samples in node to split
+                    gamma = 0, # Set minimum loss reduction for split
+                    subsample = 0.9 , # Set proportion of training data to use in tree
+                    colsample_bytree = 0.9, # Set number of variables to use in each tree
+                    
+                    nrounds = 1000, # Set number of rounds
+                    early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
+                    
+                    verbose = 1, # 1 - Prints out fit
+                    nthread = 1, # Set number of parallel threads
+                    print_every_n = 20 # Prints out result every 20th iteration
+) # Set evaluation metric to use
+
+set.seed(111111)
+bst_mod_3 <- xgb.cv(data = dtrain, # Set training data
+                    
+                    nfold = 5, # Use 5 fold cross-validation
+                    
+                    eta = 0.005, # Set learning rate
+                    max.depth = 7, # Set max depth
+                    min_child_weight = 10 , # Set minimum number of samples in node to split
+                    gamma = 0, # Set minimum loss reduction for split
+                    subsample = 0.9 , # Set proportion of training data to use in tree
+                    colsample_bytree =  0.9, # Set number of variables to use in each tree
+                    
+                    nrounds = 1000, # Set number of rounds
+                    early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
+                    
+                    verbose = 1, # 1 - Prints out fit
+                    nthread = 1, # Set number of parallel threads
+                    print_every_n = 20 # Prints out result every 20th iteration
+) # Set evaluation metric to use
+
+
+set.seed(111111)
+bst_mod_4 <- xgb.cv(data = dtrain, # Set training data
+                    
+                    nfold = 5, # Use 5 fold cross-validation
+                    
+                    eta = 0.001, # Set learning rate
+                    max.depth = 7, # Set max depth
+                    min_child_weight = 10, # Set minimum number of samples in node to split
+                    gamma = 0.1, # Set minimum loss reduction for split
+                    subsample = 0.9 , # Set proportion of training data to use in tree
+                    colsample_bytree = 0.9, # Set number of variables to use in each tree
+                    
+                    nrounds = 1000, # Set number of rounds
+                    early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
+                    
+                    verbose = 1, # 1 - Prints out fit
+                    nthread = 1, # Set number of parallel threads
+                    print_every_n = 20 # Prints out result every 20th iteration
+) # Set evaluation metric to use
+
+
+
+set.seed(111111)
+bst_mod_5 <- xgb.cv(data = dtrain, # Set training data
+                    
+                    nfold = 5, # Use 5 fold cross-validation
+                    
+                    eta = 0.0005, # Set learning rate
+                    max.depth = 7, # Set max depth
+                    min_child_weight = 10, # Set minimum number of samples in node to split
+                    gamma = 0, # Set minimum loss reduction for split
+                    subsample = 0.9 , # Set proportion of training data to use in tree
+                    colsample_bytree = 0.9, # Set number of variables to use in each tree
+                    
+                    nrounds = 1000, # Set number of rounds
+                    early_stopping_rounds = 20, # Set number of rounds to stop at if there is no improvement
+                    
+                    verbose = 1, # 1 - Prints out fit
+                    nthread = 1, # Set number of parallel threads
+                    print_every_n = 20 # Prints out result every 20th iteration
+                    
+) # Set evaluation metric to use
+
+
+
+# eta plots
+
+# Extract results for model with eta = 0.3
+pd1 <- cbind.data.frame(bst_mod_1$evaluation_log[,c("iter", "test_rmse_mean")], rep(0.03, nrow(bst_mod_1$evaluation_log)))
+names(pd1)[3] <- "eta"
+# Extract results for model with eta = 0.1
+pd2 <- cbind.data.frame(bst_mod_2$evaluation_log[,c("iter", "test_rmse_mean")], rep(0.01, nrow(bst_mod_2$evaluation_log)))
+names(pd2)[3] <- "eta"
+# Extract results for model with eta = 0.05
+pd3 <- cbind.data.frame(bst_mod_3$evaluation_log[,c("iter", "test_rmse_mean")], rep(0.005, nrow(bst_mod_3$evaluation_log)))
+names(pd3)[3] <- "eta"
+# Extract results for model with eta = 0.01
+pd4 <- cbind.data.frame(bst_mod_4$evaluation_log[,c("iter", "test_rmse_mean")], rep(0.001, nrow(bst_mod_4$evaluation_log)))
+names(pd4)[3] <- "eta"
+# Extract results for model with eta = 0.005
+pd5 <- cbind.data.frame(bst_mod_5$evaluation_log[,c("iter", "test_rmse_mean")], rep(0.0005, nrow(bst_mod_5$evaluation_log)))
+names(pd5)[3] <- "eta"
+# Join datasets
+plot_data <- rbind.data.frame(pd1, pd2, pd3, pd4, pd5)
+# Converty ETA to factor
+plot_data$eta <- as.factor(plot_data$eta)
+# Plot points
+g_6 <- ggplot(plot_data, aes(x = iter, y = test_rmse_mean, color = eta))+
+  geom_point(alpha = 0.5) +
+  theme_bw() + # Set theme
+  theme(panel.grid.major = element_blank(), # Remove grid
+        panel.grid.minor = element_blank(), # Remove grid
+        panel.border = element_blank(), # Remove grid
+        panel.background = element_blank()) + # Remove grid 
+  labs(x = "Number of Trees", title = "RMSE v Number of Trees",
+       y = "RMSE", color = "Learning \n Rate")  # Set labels
+g_6
+
+# Plot lines
+g_7 <- ggplot(plot_data, aes(x = iter, y = test_rmse_mean, color = eta))+
+  geom_smooth(alpha = 0.5) +
+  theme_bw() + # Set theme
+  theme(panel.grid.major = element_blank(), # Remove grid
+        panel.grid.minor = element_blank(), # Remove grid
+        panel.border = element_blank(), # Remove grid
+        panel.background = element_blank()) + # Remove grid 
+  labs(x = "Number of Trees", title = "RMSE v Number of Trees",
+       y = "RMSE", color = "Learning \n Rate")  # Set labels
+g_7
+
+
+```
+
+
+## Final Model
+
+```{r}
+set.seed(123)
+
+
+bst_2 <- xgboost(
+  data = dtrain,               # Set training data
+  nrounds = 1500,               # Set number of rounds
+  eta = 0.008,
+  max.depth = 6,
+  min_child_weight = 5,
+  sub.sample = .4,
+  colsample_bytree = .5,
+  gamma = 0.3,
+  lambda = 2,
+  alpha = 0.2,
+  verbose = 1,                 # Prints out fit for every 20th iteration
+  print_every_n = 20,   
+  early_stopping_rounds = 20, # Prints out result every 20th iteration
+  objective = "reg:squarederror",  # Regression task for continuous output
+  eval_metric = "rmse"         # Set evaluation metric to RMSE
+)
+
+xgb_preds <- predict(bst_2,
+                     dtest,
+                    approxcontrib = F)
+
+library(Metrics)
+
+r1 <- rmse(test_db$listPrice,xgb_preds)
+plot_vals <- cbind.data.frame(xgb_preds, test_db$listPrice)
+names(plot_vals) <- c("preds", "actual")
+
+
+ggplot(plot_vals, aes(x = actual, y = preds)) +
+  geom_smooth() +
+  geom_point() +
+  labs(subtitle = paste("RMSE:", r1))
+```
+
+
+## Visualize Results
+
+```{r}
+
+library(SHAPforxgboost)
+library(shapr)
+source("a_insights_shap_functions.r")
+
+shap_values <- predict(bst_1,
+                     dtest,
+                    predcontrib = TRUE,
+                    approxcontrib = F)
+
+shap_values[1,]
+
+shap_result <- shap.score.rank(xgb_model = bst_1, 
+                X_train =as.matrix(train_db[, -which(names(train_db) == "listPrice")]),
+                shap_approx = F)
+
+var_importance(shap_result, top_n=10)
+
+shap_long = shap.prep(shap = shap_result,
+                           X_train = as.matrix(train_db[, -which(names(train_db) == "listPrice")]), 
+                           top_n = 20)
+
+
+plot.shap.summary(data_long = shap_long)
+```
+
+
+
+
+
+## RMSE Results
+
+```{r}
+# Make predictions on training and test data
+train_preds <- predict(bst_2, dtrain)
+test_preds <- predict(bst_2, dtest)
+
+```
+
+
+
+```{r}
+# Calculate RMSE
+train_rmse <- rmse(train_db$listPrice, train_preds)
+test_rmse <- rmse(test_db$listPrice, test_preds)
+
+# Calculate MAE
+train_mae <- mean(abs(train_db$listPrice - train_preds))
+test_mae <- mean(abs(test_db$listPrice - test_preds))
+
+# Calculate R-squared
+train_r2 <- 1 - sum((train_db$listPrice - train_preds)^2) / sum((train_db$listPrice - mean(train_db$listPrice))^2)
+test_r2 <- 1 - sum((test_db$listPrice - test_preds)^2) / sum((test_db$listPrice - mean(test_db$listPrice))^2)
+
+# Print results
+cat("Training RMSE:", train_rmse, "\n")
+cat("Testing RMSE:", test_rmse, "\n")
+cat("Training MAE:", train_mae, "\n")
+cat("Testing MAE:", test_mae, "\n")
+cat("Training R-squared:", train_r2, "\n")
+cat("Testing R-squared:", test_r2, "\n")
+
+```
+
+
+
+
+
